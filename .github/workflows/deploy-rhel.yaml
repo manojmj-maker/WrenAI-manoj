@@ -1,0 +1,140 @@
+name: Deploy Wren AI to RHEL VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_path:
+        description: 'Target directory on RHEL VM'
+        required: false
+        default: '~/wrenai'
+  push:
+    branches:
+      - main
+      - legacy/v1
+    paths:
+      - 'docker/**'
+      - '.github/workflows/deploy-rhel.yaml'
+
+jobs:
+  deploy-to-rhel:
+    name: Deploy to RHEL VM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Copy Docker files to RHEL VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.RHEL_HOST }}
+          username: ${{ secrets.RHEL_USERNAME }}
+          password: ${{ secrets.RHEL_PASSWORD }}
+          port: ${{ secrets.RHEL_PORT || 22 }}
+          source: "docker/*"
+          target: "${{ github.event.inputs.deploy_path || '~/wrenai' }}"
+          strip_components: 1
+
+      - name: Execute Deployment on RHEL VM via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.RHEL_HOST }}
+          username: ${{ secrets.RHEL_USERNAME }}
+          password: ${{ secrets.RHEL_PASSWORD }}
+          port: ${{ secrets.RHEL_PORT || 22 }}
+          script: |
+            set -e
+            TARGET_DIR="${{ github.event.inputs.deploy_path || '~/wrenai' }}"
+            cd "$TARGET_DIR"
+
+            echo "=== 1. Checking Docker & Docker Compose on RHEL ==="
+            DOCKER_CMD="docker"
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker Engine & Docker Compose on RHEL..."
+              sudo dnf install -y dnf-plugins-core
+              sudo dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo || true
+              sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin --allowerasing
+              sudo systemctl enable --now docker
+              sudo usermod -aG docker "$USER" || true
+            fi
+
+            if ! docker info &> /dev/null; then
+              DOCKER_CMD="sudo docker"
+            fi
+
+            echo "=== 2. Setting up environment & configuration ==="
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+
+            # Auto-generate USER_UUID if missing
+            if ! grep -q "^USER_UUID=.\+" .env; then
+              NEW_UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "a1b2c3d4-e5f6-7890-abcd-1234567890ab")
+              sed -i "s|^USER_UUID=.*|USER_UUID=${NEW_UUID}|" .env
+            fi
+
+            # Inject secrets into .env
+            if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
+              sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}|' .env
+            fi
+
+            if [ -n "${{ secrets.USER_UUID }}" ]; then
+              sed -i 's|^USER_UUID=.*|USER_UUID=${{ secrets.USER_UUID }}|' .env
+            fi
+
+            # Copy config.yaml if not present
+            if [ ! -f config.yaml ]; then
+              cp config.example.yaml config.yaml
+            fi
+
+            # Create data directory for volume mounting
+            mkdir -p data
+
+            echo "=== 3. Adjusting RHEL SELinux permissions ==="
+            if command -v getenforce &> /dev/null && [ "$(getenforce)" = "Enforcing" ]; then
+              echo "Configuring SELinux context for mounted volumes..."
+              sudo chcon -Rt svirt_sandbox_file_t "$TARGET_DIR" || true
+            fi
+
+            echo "=== 4. Opening RHEL Firewall ports (3000, 5555) ==="
+            if sudo systemctl is-active --quiet firewalld; then
+              sudo firewall-cmd --zone=public --add-port=3000/tcp --permanent || true
+              sudo firewall-cmd --zone=public --add-port=5555/tcp --permanent || true
+              sudo firewall-cmd --reload || true
+            fi
+
+            echo "=== 5. Starting all Wren AI services ==="
+            $DOCKER_CMD compose pull || true
+            $DOCKER_CMD compose up -d --remove-orphans
+
+            echo "=== 6. Verifying service health status ==="
+            echo "Waiting for services (wren-ui, wren-ai-service, wren-engine, ibis-server, qdrant) to start..."
+            
+            MAX_RETRY=30
+            RETRY=0
+            HEALTHY=false
+
+            while [ $RETRY -lt $MAX_RETRY ]; do
+              if curl -s http://localhost:3000 > /dev/null; then
+                HEALTHY=true
+                break
+              fi
+              echo "Waiting for Wren UI (port 3000)... ($((RETRY+1))/$MAX_RETRY)"
+              sleep 5
+              RETRY=$((RETRY+1))
+            done
+
+            echo "--- Container Status ---"
+            $DOCKER_CMD compose ps
+
+            if [ "$HEALTHY" = true ]; then
+              echo "===================================================="
+              echo "🎉 SUCCESS: All Wren AI services are live and working!"
+              echo "Wren UI is accessible at: http://${{ secrets.RHEL_HOST }}:3000"
+              echo "===================================================="
+            else
+              echo "⚠️ Warning: Wren UI took longer than expected to respond."
+              echo "Displaying container logs for troubleshooting:"
+              $DOCKER_CMD compose logs --tail=50
+              exit 1
+            fi
