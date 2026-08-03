@@ -39,7 +39,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq sshpass openssh-client
 
-          # Define helper SSH & SCP commands with relaxed host checking
+          # Helper SSH & SCP commands
           SSH="sshpass -p '$RHEL_PASSWORD' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
           SCP="sshpass -p '$RHEL_PASSWORD' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $RHEL_PORT"
 
@@ -50,73 +50,65 @@ jobs:
           $SCP -r docker/* "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
 
           echo "=== 3. Executing deployment script on RHEL VM ==="
-          $SSH "bash -s" << EOF
+          $SSH "cd $TARGET_DIR && bash -c '
             set -e
-            cd "$TARGET_DIR"
 
-            echo "=== Checking Docker & Docker Compose on RHEL ==="
-            DOCKER_CMD="docker"
+            echo \"=== Checking Docker & Docker Compose on RHEL ===\"
+            DOCKER_CMD=\"docker\"
             if ! command -v docker &> /dev/null; then
-              echo "Installing Docker Engine & Docker Compose on RHEL..."
+              echo \"Installing Docker Engine & Docker Compose on RHEL...\"
               sudo dnf install -y dnf-plugins-core
               sudo dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo || true
               sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin --allowerasing
               sudo systemctl enable --now docker
-              sudo usermod -aG docker "$RHEL_USERNAME" || true
+              sudo usermod -aG docker \"$RHEL_USERNAME\" || true
             fi
 
             if ! docker info &> /dev/null; then
-              DOCKER_CMD="sudo docker"
+              DOCKER_CMD=\"sudo docker\"
             fi
 
-            echo "=== Setting up environment & configuration ==="
+            echo \"=== Setting up environment & configuration ===\"
             if [ ! -f .env ]; then
               cp .env.example .env
             fi
 
-            # Auto-generate USER_UUID if missing
-            if ! grep -q "^USER_UUID=.\+" .env; then
-              NEW_UUID=\$(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "a1b2c3d4-e5f6-7890-abcd-1234567890ab")
-              sed -i "s|^USER_UUID=.*|USER_UUID=\${NEW_UUID}|" .env
+            if ! grep -q \"^USER_UUID=.\\+\" .env; then
+              NEW_UUID=\$(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo \"a1b2c3d4-e5f6-7890-abcd-1234567890ab\")
+              sed -i \"s|^USER_UUID=.*|USER_UUID=\${NEW_UUID}|\" .env
             fi
 
-            # Inject secrets into .env
-            if [ -n "$OPENAI_API_KEY" ]; then
-              sed -i 's|^OPENAI_API_KEY=.*|OPENAI_API_KEY='"$OPENAI_API_KEY"'|' .env
+            if [ -n \"$OPENAI_API_KEY\" ]; then
+              sed -i \"s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_API_KEY|\" .env
             fi
 
-            if [ -n "$USER_UUID" ]; then
-              sed -i 's|^USER_UUID=.*|USER_UUID='"$USER_UUID"'|' .env
+            if [ -n \"$USER_UUID\" ]; then
+              sed -i \"s|^USER_UUID=.*|USER_UUID=$USER_UUID|\" .env
             fi
 
-            # Copy config.yaml if not present
             if [ ! -f config.yaml ]; then
               cp config.example.yaml config.yaml
             fi
 
-            # Create data directory for volume mounting
             mkdir -p data
 
-            echo "=== Adjusting RHEL SELinux permissions ==="
-            if command -v getenforce &> /dev/null && [ "\$(getenforce)" = "Enforcing" ]; then
-              echo "Configuring SELinux context for mounted volumes..."
-              sudo chcon -Rt svirt_sandbox_file_t "$TARGET_DIR" || true
+            echo \"=== Adjusting RHEL SELinux permissions ===\"
+            if command -v getenforce &> /dev/null && [ \"\$(getenforce)\" = \"Enforcing\" ]; then
+              sudo chcon -Rt svirt_sandbox_file_t . || true
             fi
 
-            echo "=== Opening RHEL Firewall ports (3000, 5555) ==="
+            echo \"=== Opening RHEL Firewall ports (3000, 5555) ===\"
             if sudo systemctl is-active --quiet firewalld; then
               sudo firewall-cmd --zone=public --add-port=3000/tcp --permanent || true
               sudo firewall-cmd --zone=public --add-port=5555/tcp --permanent || true
               sudo firewall-cmd --reload || true
             fi
 
-            echo "=== Starting all Wren AI services ==="
+            echo \"=== Starting all Wren AI services ===\"
             \$DOCKER_CMD compose pull || true
             \$DOCKER_CMD compose up -d --remove-orphans
 
-            echo "=== Verifying service health status ==="
-            echo "Waiting for services (wren-ui, wren-ai-service, wren-engine, ibis-server, qdrant) to start..."
-            
+            echo \"=== Verifying service health status ===\"
             MAX_RETRY=30
             RETRY=0
             HEALTHY=false
@@ -126,23 +118,21 @@ jobs:
                 HEALTHY=true
                 break
               fi
-              echo "Waiting for Wren UI (port 3000)... (\$((\$RETRY+1))/\$MAX_RETRY)"
+              echo \"Waiting for Wren UI (port 3000)... (\$((\$RETRY+1))/\$MAX_RETRY)\"
               sleep 5
               RETRY=\$((\$RETRY+1))
             done
 
-            echo "--- Container Status ---"
             \$DOCKER_CMD compose ps
 
-            if [ "\$HEALTHY" = true ]; then
-              echo "===================================================="
-              echo "🎉 SUCCESS: All Wren AI services are live and working!"
-              echo "Wren UI is accessible at: http://$RHEL_HOST:3000"
-              echo "===================================================="
+            if [ \"\$HEALTHY\" = true ]; then
+              echo \"====================================================\"
+              echo \"🎉 SUCCESS: All Wren AI services are live and working!\"
+              echo \"Wren UI is accessible at: http://$RHEL_HOST:3000\"
+              echo \"====================================================\"
             else
-              echo "⚠️ Warning: Wren UI took longer than expected to respond."
-              echo "Displaying container logs for troubleshooting:"
+              echo \"⚠️ Warning: Wren UI took longer than expected to respond.\"
               \$DOCKER_CMD compose logs --tail=50
               exit 1
             fi
-    EOF
+          '"
