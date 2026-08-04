@@ -28,20 +28,24 @@ jobs:
         env:
           RHEL_HOST: ${{ secrets.RHEL_HOST }}
           RHEL_USERNAME: ${{ secrets.RHEL_USERNAME }}
-          RHEL_PASSWORD: ${{ secrets.RHEL_PASSWORD }}
+          RHEL_SSH_KEY: ${{ secrets.RHEL_SSH_KEY }}
           RHEL_PORT: ${{ secrets.RHEL_PORT || '22' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           USER_UUID: ${{ secrets.USER_UUID }}
           TARGET_DIR: ${{ github.event.inputs.deploy_path || '~/wrenai' }}
         run: |
           set -e
-          echo "=== Installing sshpass & OpenSSH Client ==="
+          echo "=== Setting up SSH Key & OpenSSH Client ==="
           sudo apt-get update -qq
-          sudo apt-get install -y -qq sshpass openssh-client
+          sudo apt-get install -y -qq openssh-client
 
-          # Helper SSH & SCP commands
-          SSH="sshpass -p '$RHEL_PASSWORD' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
-          SCP="sshpass -p '$RHEL_PASSWORD' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $RHEL_PORT"
+          mkdir -p ~/.ssh
+          echo "$RHEL_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          # Helper SSH & SCP commands using SSH key authentication
+          SSH="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
+          SCP="scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $RHEL_PORT"
 
           echo "=== 1. Creating target directory on RHEL VM ==="
           $SSH "mkdir -p $TARGET_DIR"
