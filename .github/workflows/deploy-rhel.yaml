@@ -102,10 +102,8 @@ jobs:
                 cp .env.example .env
               else
                 echo \"Creating default .env with fallback/dummy values...\"
-                cat << \"EOF\" > .env
-OPENAI_API_KEY=sk-dummy-openai-api-key-change-me
-USER_UUID=a1b2c3d4-e5f6-7890-abcd-1234567890ab
-EOF
+                echo \"OPENAI_API_KEY=sk-dummy-openai-api-key-change-me\" > .env
+                echo \"USER_UUID=a1b2c3d4-e5f6-7890-abcd-1234567890ab\" >> .env
               fi
             fi
 
