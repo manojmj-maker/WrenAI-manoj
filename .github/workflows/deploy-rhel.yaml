@@ -51,7 +51,7 @@ jobs:
           $SSH "mkdir -p $TARGET_DIR"
 
           echo "=== 2. Transferring docker/ configuration files ==="
-          $SCP -r docker/* "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
+          $SCP -r docker/. "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
 
           echo "=== 3. Executing deployment script on RHEL VM ==="
           $SSH "cd $TARGET_DIR && bash -c '
@@ -70,7 +70,8 @@ jobs:
                 sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || true
               elif command -v apt-get &> /dev/null; then
                 sudo apt-get update -qq
-                sudo apt-get install -y -qq ca-certificates curl gnupg docker.io docker-compose-plugin || sudo curl -fsSL https://get.docker.com | sh
+                sudo apt-get install -y -qq ca-certificates curl gnupg
+                sudo curl -fsSL https://get.docker.com | sh
               else
                 curl -fsSL https://get.docker.com | sh
               fi
@@ -97,7 +98,15 @@ jobs:
 
             echo \"=== Setting up environment & configuration ===\"
             if [ ! -f .env ]; then
-              cp .env.example .env
+              if [ -f .env.example ]; then
+                cp .env.example .env
+              else
+                echo \"Creating default .env with fallback/dummy values...\"
+                cat << \"EOF\" > .env
+OPENAI_API_KEY=sk-dummy-openai-api-key-change-me
+USER_UUID=a1b2c3d4-e5f6-7890-abcd-1234567890ab
+EOF
+              fi
             fi
 
             if ! grep -q \"^USER_UUID=.\\+\" .env; then
