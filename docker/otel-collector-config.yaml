@@ -25,6 +25,9 @@ receivers:
         timestamp:
           parse_from: attributes.time
           layout: '%Y-%m-%dT%H:%M:%S.%fZ'
+      - type: move
+        from: attributes.log
+        to: body
 
 processors:
   batch:
