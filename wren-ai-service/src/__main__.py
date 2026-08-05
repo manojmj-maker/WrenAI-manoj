@@ -54,19 +54,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-import time
-import logging
+import os
+try:
+    from opentelemetry import metrics
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-api_logger = logging.getLogger("wren-ai-service")
-
-@app.middleware("http")
-async def add_api_metrics_middleware(request, call_next):
-    start_time = time.perf_counter()
-    response = await call_next(request)
-    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-    metric_msg = f"[API_METRIC] method={request.method} path={request.url.path} status={response.status_code} latency_ms={duration_ms}"
-    print(metric_msg, flush=True)
-    return response
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
+    metric_reader = PeriodicExportingMetricReader(
+        OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True),
+        export_interval_millis=10000,
+    )
+    provider = MeterProvider(metric_readers=[metric_reader])
+    metrics.set_meter_provider(provider)
+    FastAPIInstrumentor.instrument_app(app)
+except Exception as e:
+    import logging
+    logging.getLogger("wren-ai-service").warning(f"OpenTelemetry OTLP setup skipped: {e}")
 
 app.include_router(routers.router, prefix="/v1", tags=["v1"])
 if settings.development:

@@ -41,6 +41,10 @@ werkzeug = ">=3.1.5"  # CVE: safe_join Windows device name vulnerability
 marshmallow = ">=3.26.2"  # CVE: Schema.load(many=True) DoS
 pillow = ">=12.1.1"  # CVE: out-of-bounds write when loading PSD images
 protobuf = ">=5.29.6"
+opentelemetry-api = "^1.25.0"
+opentelemetry-sdk = "^1.25.0"
+opentelemetry-exporter-otlp = "^1.25.0"
+opentelemetry-instrumentation-fastapi = "^0.46b0"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.7.1"
