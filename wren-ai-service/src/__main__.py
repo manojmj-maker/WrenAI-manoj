@@ -33,57 +33,61 @@ async def lifespan(app: FastAPI):
     app.state.service_metadata = create_service_metadata(pipe_components)
     init_langfuse(settings)
 
+    try:
+        import os
+        from opentelemetry import metrics, trace
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.sdk.resources import Resource
+
+        otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
+        resource = Resource.create({"service.name": "wren-ai-service"})
+
+        # Metrics Setup
+        metric_reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True),
+            export_interval_millis=2000,
+        )
+        app.state.otel_meter_provider = MeterProvider(metric_readers=[metric_reader], resource=resource)
+        metrics.set_meter_provider(app.state.otel_meter_provider)
+
+        # Traces Setup
+        app.state.otel_tracer_provider = TracerProvider(resource=resource)
+        span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
+        app.state.otel_tracer_provider.add_span_processor(span_processor)
+        trace.set_tracer_provider(app.state.otel_tracer_provider)
+
+        FastAPIInstrumentor.instrument_app(
+            app,
+            tracer_provider=app.state.otel_tracer_provider,
+            meter_provider=app.state.otel_meter_provider,
+        )
+
+        meter = metrics.get_meter("wren-ai-service")
+        request_counter = meter.create_counter("http_requests_total")
+
+        @app.middleware("http")
+        async def track_requests(request, call_next):
+            response = await call_next(request)
+            request_counter.add(1, {"path": request.url.path, "status": str(response.status_code)})
+            return response
+    except Exception as e:
+        import logging
+        logging.getLogger("wren-ai-service").warning(f"OpenTelemetry setup failed: {e}")
+
     yield
 
     # shutdown events
     langfuse_context.flush()
-
-
-app = FastAPI(
-    title="wren-ai-service API Docs",
-    lifespan=lifespan,
-    redoc_url=None,
-    default_response_class=ORJSONResponse,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-import os
-try:
-    from opentelemetry import metrics
-    from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.sdk.resources import Resource
-
-    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
-    metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True),
-        export_interval_millis=10000,
-    )
-    resource = Resource.create({"service.name": "wren-ai-service"})
-    provider = MeterProvider(metric_readers=[metric_reader], resource=resource)
-    metrics.set_meter_provider(provider)
-    FastAPIInstrumentor.instrument_app(app, meter_provider=provider)
-
-    meter = metrics.get_meter("wren-ai-service")
-    request_counter = meter.create_counter("http_requests_total")
-
-    @app.middleware("http")
-    async def track_requests(request, call_next):
-        response = await call_next(request)
-        request_counter.add(1, {"path": request.url.path, "status": str(response.status_code)})
-        return response
-except Exception as e:
-    import logging
-    logging.getLogger("wren-ai-service").warning(f"OpenTelemetry OTLP setup skipped: {e}")
+    if hasattr(app.state, "otel_meter_provider"):
+        app.state.otel_meter_provider.shutdown()
+    if hasattr(app.state, "otel_tracer_provider"):
+        app.state.otel_tracer_provider.shutdown()
     
 
 app.include_router(routers.router, prefix="/v1", tags=["v1"])
