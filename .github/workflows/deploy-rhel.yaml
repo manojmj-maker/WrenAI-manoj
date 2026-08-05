@@ -32,6 +32,8 @@ jobs:
           RHEL_PORT: ${{ secrets.RHEL_PORT || '22' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           USER_UUID: ${{ secrets.USER_UUID }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           TARGET_DIR: ${{ github.event.inputs.deploy_path || '~/wrenai' }}
         run: |
           set -e
@@ -118,6 +120,21 @@ jobs:
 
             if [ -n \"$USER_UUID\" ]; then
               sed -i \"s|^USER_UUID=.*|USER_UUID=$USER_UUID|\" .env
+            fi
+
+            if [ -n \"$GCP_PROJECT_ID\" ]; then
+              if grep -q \"^GCP_PROJECT_ID=\" .env; then
+                sed -i \"s|^GCP_PROJECT_ID=.*|GCP_PROJECT_ID=$GCP_PROJECT_ID|\" .env
+              else
+                echo \"GCP_PROJECT_ID=$GCP_PROJECT_ID\" >> .env
+              fi
+            fi
+
+            if [ -n \"$GCP_SA_KEY\" ]; then
+              echo \"$GCP_SA_KEY\" > gcp-key.json
+              chmod 600 gcp-key.json
+            elif [ ! -f gcp-key.json ]; then
+              echo \"{}\" > gcp-key.json
             fi
 
             if [ ! -f config.yaml ]; then

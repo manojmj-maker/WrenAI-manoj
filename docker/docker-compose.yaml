@@ -120,3 +120,22 @@ services:
     depends_on:
       - wren-ai-service
       - wren-engine
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    restart: on-failure
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ${PROJECT_DIR}/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ${PROJECT_DIR}/gcp-key.json:/etc/gcp-key.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/etc/gcp-key.json
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - wren
+
