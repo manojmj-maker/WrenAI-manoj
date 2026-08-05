@@ -63,6 +63,7 @@ services:
       - ${PROJECT_DIR}/.env
     volumes:
       - ${PROJECT_DIR}/config.yaml:/app/config.yaml:ro
+      - ${PROJECT_DIR}/src:/app/src:ro
       - ${PROJECT_DIR}/data:/app/data:ro
     networks:
       - wren
@@ -125,6 +126,7 @@ services:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
     restart: on-failure
+    user: "0:0"
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ${PROJECT_DIR}/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro

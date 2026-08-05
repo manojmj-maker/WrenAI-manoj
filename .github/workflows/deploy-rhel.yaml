@@ -52,8 +52,9 @@ jobs:
           echo "=== 1. Creating target directory on RHEL VM ==="
           $SSH "mkdir -p $TARGET_DIR"
 
-          echo "=== 2. Transferring docker/ configuration files ==="
+          echo "=== 2. Transferring docker/ configuration files & src ==="
           $SCP -r docker/. "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
+          $SCP -r wren-ai-service/src "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
 
           if [ -n "$GCP_SA_KEY" ]; then
             echo "=== Transferring GCP Service Account Key ==="
@@ -139,7 +140,7 @@ jobs:
 
             if [ -f gcp_key.b64 ]; then
               base64 -d gcp_key.b64 > gcp-key.json
-              chmod 600 gcp-key.json
+              chmod 644 gcp-key.json
               rm -f gcp_key.b64
             fi
 
