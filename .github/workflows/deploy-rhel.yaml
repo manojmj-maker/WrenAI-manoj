@@ -9,7 +9,6 @@ on:
         default: '~/wrenai'
   push:
     branches:
-      - main
       - legacy/v1
     paths:
       - 'docker/**'
