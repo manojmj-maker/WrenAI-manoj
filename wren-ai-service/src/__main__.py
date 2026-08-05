@@ -73,6 +73,7 @@ try:
 except Exception as e:
     import logging
     logging.getLogger("wren-ai-service").warning(f"OpenTelemetry OTLP setup skipped: {e}")
+    
 
 app.include_router(routers.router, prefix="/v1", tags=["v1"])
 if settings.development:
@@ -119,3 +120,5 @@ if __name__ == "__main__":
         loop="uvloop",
         http="httptools",
     )
+
+
