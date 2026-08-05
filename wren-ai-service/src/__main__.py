@@ -61,13 +61,15 @@ try:
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.resources import Resource
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
     metric_reader = PeriodicExportingMetricReader(
         OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True),
         export_interval_millis=10000,
     )
-    provider = MeterProvider(metric_readers=[metric_reader])
+    resource = Resource.create({"service.name": "wren-ai-service"})
+    provider = MeterProvider(metric_readers=[metric_reader], resource=resource)
     metrics.set_meter_provider(provider)
     FastAPIInstrumentor.instrument_app(app)
 except Exception as e:
