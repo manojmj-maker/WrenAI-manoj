@@ -54,3 +54,4 @@ service:
       receivers: [filelog, otlp]
       processors: [batch]
       exporters: [debug, googlecloud]
+
