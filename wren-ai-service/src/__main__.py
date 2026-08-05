@@ -64,9 +64,8 @@ async def add_api_metrics_middleware(request, call_next):
     start_time = time.perf_counter()
     response = await call_next(request)
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-    api_logger.info(
-        f"[API_METRIC] method={request.method} path={request.url.path} status={response.status_code} latency_ms={duration_ms}"
-    )
+    metric_msg = f"[API_METRIC] method={request.method} path={request.url.path} status={response.status_code} latency_ms={duration_ms}"
+    print(metric_msg, flush=True)
     return response
 
 app.include_router(routers.router, prefix="/v1", tags=["v1"])
