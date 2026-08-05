@@ -34,7 +34,8 @@ exporters:
   debug:
     verbosity: basic
   googlecloud:
-    project: "${GCP_PROJECT_ID}"
+    log:
+      default_log_name: opentelemetry-collector
 
 service:
   pipelines:

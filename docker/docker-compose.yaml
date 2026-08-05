@@ -131,8 +131,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ${PROJECT_DIR}/gcp-key.json:/etc/gcp-key.json:ro
+    env_file:
+      - ${PROJECT_DIR}/.env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/etc/gcp-key.json
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
     ports:
       - "4317:4317"
       - "4318:4318"
