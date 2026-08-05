@@ -30,6 +30,8 @@ receivers:
 processors:
   batch:
     timeout: 10s
+  resourcedetection:
+    detectors: [env, system]
 
 exporters:
   debug:
@@ -42,7 +44,7 @@ service:
   pipelines:
     metrics:
       receivers: [docker_stats, hostmetrics, otlp]
-      processors: [batch]
+      processors: [resourcedetection, batch]
       exporters: [debug, googlecloud]
     traces:
       receivers: [otlp]
