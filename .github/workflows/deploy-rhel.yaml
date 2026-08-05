@@ -55,6 +55,13 @@ jobs:
           echo "=== 2. Transferring docker/ configuration files ==="
           $SCP -r docker/. "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
 
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "=== Transferring GCP Service Account Key ==="
+            (echo "$GCP_SA_KEY" | base64 -w 0 2>/dev/null || echo "$GCP_SA_KEY" | base64) > /tmp/gcp_key.b64
+            $SCP /tmp/gcp_key.b64 "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/gcp_key.b64"
+            rm -f /tmp/gcp_key.b64
+          fi
+
           echo "=== 3. Executing deployment script on RHEL VM ==="
           $SSH "cd $TARGET_DIR && bash -c '
             set -e
@@ -130,11 +137,10 @@ jobs:
               fi
             fi
 
-            if [ -n \"$GCP_SA_KEY\" ]; then
-              echo \"$GCP_SA_KEY\" > gcp-key.json
+            if [ -f gcp_key.b64 ]; then
+              base64 -d gcp_key.b64 > gcp-key.json
               chmod 600 gcp-key.json
-            elif [ ! -f gcp-key.json ]; then
-              echo \"{}\" > gcp-key.json
+              rm -f gcp_key.b64
             fi
 
             if [ ! -f config.yaml ]; then
