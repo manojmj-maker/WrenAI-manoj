@@ -71,7 +71,16 @@ try:
     resource = Resource.create({"service.name": "wren-ai-service"})
     provider = MeterProvider(metric_readers=[metric_reader], resource=resource)
     metrics.set_meter_provider(provider)
-    FastAPIInstrumentor.instrument_app(app)
+    FastAPIInstrumentor.instrument_app(app, meter_provider=provider)
+
+    meter = metrics.get_meter("wren-ai-service")
+    request_counter = meter.create_counter("http_requests_total")
+
+    @app.middleware("http")
+    async def track_requests(request, call_next):
+        response = await call_next(request)
+        request_counter.add(1, {"path": request.url.path, "status": str(response.status_code)})
+        return response
 except Exception as e:
     import logging
     logging.getLogger("wren-ai-service").warning(f"OpenTelemetry OTLP setup skipped: {e}")
