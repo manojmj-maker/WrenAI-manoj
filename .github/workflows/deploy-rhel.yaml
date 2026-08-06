@@ -51,9 +51,10 @@ jobs:
           echo "=== 1. Creating target directory on RHEL VM ==="
           $SSH "mkdir -p $TARGET_DIR"
 
-          echo "=== 2. Transferring docker/ configuration files & src ==="
+          echo "=== 2. Transferring docker/ configuration files, src & vanilla-fastapi-app ==="
           $SCP -r docker/. "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
           $SCP -r wren-ai-service/src "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
+          $SCP -r vanilla-fastapi-app "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
 
           if [ -n "$GCP_SA_KEY" ]; then
             echo "=== Transferring GCP Service Account Key ==="
@@ -140,6 +141,7 @@ jobs:
             if [ -f gcp_key.b64 ]; then
               base64 -d gcp_key.b64 > gcp-key.json
               chmod 644 gcp-key.json
+              cp gcp-key.json vanilla-fastapi-app/gcp-key.json 2>/dev/null || true
               rm -f gcp_key.b64
             fi
 
@@ -154,19 +156,28 @@ jobs:
               sudo chcon -Rt svirt_sandbox_file_t . || true
             fi
 
-            echo \"=== Opening Firewall ports (3000, 5555) ===\"
+            echo \"=== Opening Firewall ports (3000, 5555, 8080) ===\"
             if sudo systemctl is-active --quiet firewalld; then
               sudo firewall-cmd --zone=public --add-port=3000/tcp --permanent || true
               sudo firewall-cmd --zone=public --add-port=5555/tcp --permanent || true
+              sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent || true
               sudo firewall-cmd --reload || true
             elif command -v ufw &> /dev/null; then
               sudo ufw allow 3000/tcp || true
               sudo ufw allow 5555/tcp || true
+              sudo ufw allow 8080/tcp || true
             fi
 
             echo \"=== Starting all Wren AI services ===\"
             \$COMPOSE_CMD pull || true
             \$COMPOSE_CMD up -d --remove-orphans
+
+            echo \"=== Deploying Vanilla FastAPI App & Dedicated Collector ===\"
+            if [ -d vanilla-fastapi-app ]; then
+              cd vanilla-fastapi-app
+              \$COMPOSE_CMD up -d --build
+              cd ..
+            fi
 
             echo \"=== Verifying service health status ===\"
             MAX_RETRY=30

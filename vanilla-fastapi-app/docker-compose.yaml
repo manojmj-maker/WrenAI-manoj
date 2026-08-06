@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  vanilla-fastapi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vanilla-fastapi-app
+    restart: on-failure
+    ports:
+      - "8080:8000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://vanilla-otel-collector:4317
+    networks:
+      - vanilla-telemetry-net
+    depends_on:
+      - vanilla-otel-collector
+
+  vanilla-otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: vanilla-otel-collector
+    restart: on-failure
+    user: "0:0"
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+      - ${GCP_KEY_PATH:-/Users/manojmj/Downloads/zulinginternaldev-d855b3027d80.json}:/etc/gcp-key.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/etc/gcp-key.json
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-zulinginternaldev}
+    ports:
+      - "4319:4317"
+      - "4320:4318"
+    networks:
+      - vanilla-telemetry-net
+
+networks:
+  vanilla-telemetry-net:
+    driver: bridge
