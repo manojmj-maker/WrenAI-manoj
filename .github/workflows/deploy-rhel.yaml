@@ -156,16 +156,18 @@ jobs:
               sudo chcon -Rt svirt_sandbox_file_t . || true
             fi
 
-            echo \"=== Opening Firewall ports (3000, 5555, 8080) ===\"
+            echo \"=== Opening Firewall ports (3000, 5555, 8080, 8081) ===\"
             if sudo systemctl is-active --quiet firewalld; then
               sudo firewall-cmd --zone=public --add-port=3000/tcp --permanent || true
               sudo firewall-cmd --zone=public --add-port=5555/tcp --permanent || true
               sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent || true
+              sudo firewall-cmd --zone=public --add-port=8081/tcp --permanent || true
               sudo firewall-cmd --reload || true
             elif command -v ufw &> /dev/null; then
               sudo ufw allow 3000/tcp || true
               sudo ufw allow 5555/tcp || true
               sudo ufw allow 8080/tcp || true
+              sudo ufw allow 8081/tcp || true
             fi
 
             echo \"=== Starting all Wren AI services ===\"
@@ -175,6 +177,10 @@ jobs:
             echo \"=== Deploying Vanilla FastAPI App & Dedicated Collector ===\"
             if [ -d vanilla-fastapi-app ]; then
               cd vanilla-fastapi-app
+              if [ -f ../gcp-key.json ]; then
+                cp ../gcp-key.json ./gcp-key.json
+                chmod 644 ./gcp-key.json
+              fi
               \$COMPOSE_CMD up -d --build
               cd ..
             fi

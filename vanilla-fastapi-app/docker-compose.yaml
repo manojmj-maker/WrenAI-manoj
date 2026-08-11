@@ -1,6 +1,7 @@
 version: "3.8"
 
 services:
+  # 1. Manual / In-Code Instrumented App (Port 8080)
   vanilla-fastapi-app:
     build:
       context: .
@@ -16,6 +17,28 @@ services:
     depends_on:
       - vanilla-otel-collector
 
+  # 2. Zero-Code Auto-Instrumented App (Port 8081)
+  zero-code-fastapi-app:
+    build:
+      context: ./zero-code-app
+      dockerfile: Dockerfile
+    container_name: zero-code-fastapi-app
+    restart: on-failure
+    ports:
+      - "8081:8000"
+    environment:
+      - OTEL_SERVICE_NAME=zero-code-fastapi-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://vanilla-otel-collector:4317
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=otlp
+      - OTEL_LOGS_EXPORTER=otlp
+    networks:
+      - vanilla-telemetry-net
+    depends_on:
+      - vanilla-otel-collector
+
+  # 3. Dedicated Shared OTel Collector
   vanilla-otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: vanilla-otel-collector
@@ -24,7 +47,7 @@ services:
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-      - ${GCP_KEY_PATH:-/Users/manojmj/Downloads/zulinginternaldev-d855b3027d80.json}:/etc/gcp-key.json:ro
+      - ./gcp-key.json:/etc/gcp-key.json:ro
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/etc/gcp-key.json
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-zulinginternaldev}
