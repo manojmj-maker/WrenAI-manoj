@@ -9,7 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source code
-COPY main.py .
+COPY main.py sample_routes.py ./
 
 EXPOSE 8000
 
