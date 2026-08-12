@@ -45,11 +45,29 @@ jobs:
           echo "$RHEL_SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-          # Helper SSH & SCP commands using SSH key authentication
-          SSH="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
-          SCP="scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $RHEL_PORT"
+          # Helper SSH & SCP commands with extended timeout and keepalive
+          SSH="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=60 -o ServerAliveInterval=15 -o ServerAliveCountMax=5 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
+          SCP="scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=60 -P $RHEL_PORT"
 
-          echo "=== 1. Checking VM System Resources (Disk & Memory) & Preparing Directory ==="
+          echo "=== 1. Testing SSH Connection & Checking VM Resources ==="
+          # Retry loop in case VM is recovering or under temporary high load
+          CONNECTED=false
+          for i in 1 2 3 4 5; do
+            echo "Attempting SSH connection to $RHEL_HOST (Attempt $i/5)..."
+            if $SSH "echo 'SSH connection established successfully.'" ; then
+              CONNECTED=true
+              break
+            fi
+            echo "SSH connection attempt $i failed. Retrying in 10 seconds..."
+            sleep 10
+          done
+
+          if [ "$CONNECTED" != "true" ]; then
+            echo "❌ ERROR: Could not establish SSH connection to $RHEL_HOST after 5 attempts."
+            echo "Please check if the VM is running and healthy in your GCP / cloud console."
+            exit 1
+          fi
+
           $SSH "bash -c '
             echo \"================ SYSTEM RESOURCE STATUS ================\"
             echo \">> DISK SPACE:\"
