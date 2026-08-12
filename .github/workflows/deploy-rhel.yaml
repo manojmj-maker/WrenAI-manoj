@@ -49,8 +49,30 @@ jobs:
           SSH="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
           SCP="scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $RHEL_PORT"
 
-          echo "=== 1. Creating target directory & setting permissions on RHEL VM ==="
-          $SSH "mkdir -p $TARGET_DIR && (sudo chown -R $RHEL_USERNAME:$RHEL_USERNAME $TARGET_DIR 2>/dev/null || true) && chmod -R u+rwX $TARGET_DIR 2>/dev/null || true"
+          echo "=== 1. Checking VM System Resources (Disk & Memory) & Preparing Directory ==="
+          $SSH "bash -c '
+            echo \"================ SYSTEM RESOURCE STATUS ================\"
+            echo \">> DISK SPACE:\"
+            df -h /
+            echo \"\"
+            echo \">> RAM / MEMORY:\"
+            free -h 2>/dev/null || cat /proc/meminfo | head -n 5
+            echo \"\"
+            if command -v docker &>/dev/null; then
+              echo \">> DOCKER STORAGE USAGE:\"
+              sudo docker system df 2>/dev/null || docker system df 2>/dev/null || true
+              echo \"\"
+              echo \">> Pruning dangling/unused Docker images & build cache to free disk space...\"
+              sudo docker system prune -f 2>/dev/null || docker system prune -f 2>/dev/null || true
+              echo \">> DISK SPACE AFTER PRUNE:\"
+              df -h /
+            fi
+            echo \"=======================================================\"
+            echo \"Creating target directory & setting permissions...\"
+            mkdir -p $TARGET_DIR
+            sudo chown -R $RHEL_USERNAME:$RHEL_USERNAME $TARGET_DIR 2>/dev/null || true
+            chmod -R u+rwX $TARGET_DIR 2>/dev/null || true
+          '"
 
           echo "=== 2. Transferring docker/ configuration files, src & vanilla-fastapi-app ==="
           $SCP -r docker/. "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
