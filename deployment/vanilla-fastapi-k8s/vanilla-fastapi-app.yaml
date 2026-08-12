@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vanilla-fastapi-app
+  namespace: default
+  labels:
+    app: vanilla-fastapi-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vanilla-fastapi-app
+  template:
+    metadata:
+      labels:
+        app: vanilla-fastapi-app
+    spec:
+      containers:
+        - name: vanilla-fastapi-app
+          image: gcr.io/zulinginternaldev/vanilla-fastapi-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "vanilla-fastapi-service"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vanilla-fastapi-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: vanilla-fastapi-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zero-code-fastapi-app
+  namespace: default
+  labels:
+    app: zero-code-fastapi-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zero-code-fastapi-app
+  template:
+    metadata:
+      labels:
+        app: zero-code-fastapi-app
+    spec:
+      containers:
+        - name: zero-code-fastapi-app
+          image: gcr.io/zulinginternaldev/zero-code-fastapi-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "zero-code-fastapi-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "otlp"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zero-code-fastapi-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: zero-code-fastapi-app
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8000

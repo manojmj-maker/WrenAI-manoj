@@ -1,0 +1,94 @@
+name: Deploy to GKE (Google Kubernetes Engine)
+
+on:
+  workflow_dispatch:
+    inputs:
+      gke_cluster:
+        description: 'GKE Cluster Name'
+        required: false
+        default: 'wren-ai-cluster'
+      gke_zone:
+        description: 'GKE Zone or Region (e.g. us-central1-a or us-central1)'
+        required: false
+        default: 'us-central1-a'
+  push:
+    branches:
+      - legacy/v1
+    paths:
+      - 'vanilla-fastapi-app/**'
+      - 'deployment/vanilla-fastapi-k8s/**'
+      - '.github/workflows/deploy-gke.yaml'
+
+jobs:
+  deploy-to-gke:
+    name: Build & Deploy to GKE
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY2 || secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker CLI for Google Container Registry (GCR)
+        run: |
+          gcloud auth configure-docker --quiet
+
+      - name: Get GKE Cluster Credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ github.event.inputs.gke_cluster || secrets.GKE_CLUSTER || 'wren-ai-cluster' }}
+          location: ${{ github.event.inputs.gke_zone || secrets.GKE_ZONE || secrets.GKE_REGION || 'us-central1-a' }}
+
+      - name: Build and Push Docker Images to GCR
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'zulinginternaldev' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "=== 1. Building and Pushing Manual FastAPI App Image ==="
+          docker build -t "gcr.io/${GCP_PROJECT_ID}/vanilla-fastapi-app:${IMAGE_TAG}" \
+                       -t "gcr.io/${GCP_PROJECT_ID}/vanilla-fastapi-app:latest" \
+                       ./vanilla-fastapi-app
+          docker push "gcr.io/${GCP_PROJECT_ID}/vanilla-fastapi-app:${IMAGE_TAG}"
+          docker push "gcr.io/${GCP_PROJECT_ID}/vanilla-fastapi-app:latest"
+
+          echo "=== 2. Building and Pushing Zero-Code FastAPI App Image ==="
+          docker build -t "gcr.io/${GCP_PROJECT_ID}/zero-code-fastapi-app:${IMAGE_TAG}" \
+                       -t "gcr.io/${GCP_PROJECT_ID}/zero-code-fastapi-app:latest" \
+                       ./vanilla-fastapi-app/zero-code-app
+          docker push "gcr.io/${GCP_PROJECT_ID}/zero-code-fastapi-app:${IMAGE_TAG}"
+          docker push "gcr.io/${GCP_PROJECT_ID}/zero-code-fastapi-app:latest"
+
+      - name: Deploy OpenTelemetry Collector to GKE
+        run: |
+          echo "=== Deploying In-Cluster OpenTelemetry Collector ==="
+          kubectl apply -f deployment/vanilla-fastapi-k8s/otel-collector-gke.yaml
+
+      - name: Deploy FastAPI Applications to GKE
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'zulinginternaldev' }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "=== Injecting Image Tags into Kubernetes Manifests ==="
+          sed -i "s|gcr.io/zulinginternaldev/vanilla-fastapi-app:latest|gcr.io/${GCP_PROJECT_ID}/vanilla-fastapi-app:${IMAGE_TAG}|g" deployment/vanilla-fastapi-k8s/vanilla-fastapi-app.yaml || true
+          sed -i "s|gcr.io/zulinginternaldev/zero-code-fastapi-app:latest|gcr.io/${GCP_PROJECT_ID}/zero-code-fastapi-app:${IMAGE_TAG}|g" deployment/vanilla-fastapi-k8s/vanilla-fastapi-app.yaml || true
+
+          echo "=== Applying Kubernetes Deployments & Services ==="
+          kubectl apply -f deployment/vanilla-fastapi-k8s/vanilla-fastapi-app.yaml
+
+      - name: Verify Rollout Status
+        run: |
+          echo "=== Waiting for deployments to become ready ==="
+          kubectl rollout status deployment/otel-collector --timeout=180s
+          kubectl rollout status deployment/vanilla-fastapi-app --timeout=180s
+          kubectl rollout status deployment/zero-code-fastapi-app --timeout=180s
+
+          echo "=== Cluster Services and Endpoints ==="
+          kubectl get services -o wide
+          kubectl get pods -o wide
