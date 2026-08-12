@@ -1,6 +1,6 @@
-# Vanilla FastAPI OpenTelemetry Demo & Dedicated Collector Deployment
+# Vanilla FastAPI OpenTelemetry Demo (GCE Ops Agent Integration)
 
-This directory contains a standalone **Vanilla FastAPI Application** equipped with an interactive **Telemetry UI** and a **Dedicated OpenTelemetry Collector** that exports metrics and traces to **Google Cloud Platform (Cloud Monitoring & Cloud Trace)** using the shared GCP Service Account key (`zulinginternaldev`).
+This directory contains standalone **Vanilla FastAPI Applications** (Manual SDK + Zero-Code Auto-Instrumentation) configured to export metrics, traces, and logs directly to the **Google Cloud Ops Agent** running natively on a **Google Compute Engine (GCE) VM**.
 
 ---
 
@@ -8,52 +8,86 @@ This directory contains a standalone **Vanilla FastAPI Application** equipped wi
 
 ```
 +-----------------------------------------------------------------------------------+
-| Docker Network: vanilla-telemetry-net                                             |
+| GCE Virtual Machine (RHEL / Debian / Ubuntu)                                      |
 |                                                                                   |
-|  +--------------------------------+  gRPC OTLP  +------------------------------+  |
-|  |  vanilla-fastapi-app (8080)    | ----------> |  vanilla-otel-collector      |  |
-|  |  (FastAPI + OTel Python SDK)   |   (:4317)   |  (googlecloud exporter)      |  |
-|  +--------------------------------+             +--------------+---------------+  |
-+----------------------------------------------------------------|------------------+
-                                                                 |
-                                                                 v  googlecloud API
-                                              +-------------------------------------+
-                                              | Google Cloud Platform               |
-                                              | - GCP Project: zulinginternaldev    |
-                                              | - Cloud Monitoring (Metrics)        |
-                                              | - Cloud Trace (Spans)               |
-                                              +-------------------------------------+
+|  +--------------------------------+                                               |
+|  |  vanilla-fastapi-app (8080)    |                                               |
+|  |  (FastAPI + OTel Python SDK)   | ---\                                          |
+|  +--------------------------------+     \                                         |
+|                                          +---> Google Cloud Ops Agent             |
+|  +--------------------------------+     /      (localhost:4317 / 4318)            |
+|  |  zero-code-fastapi-app (8081)  | ---/       (Native OTLP receiver)             |
+|  |  (opentelemetry-instrument)    |                                               |
+|  +--------------------------------+                                               |
++---------------------------------------------------|-------------------------------+
+                                                    |  Cloud Monitoring / Trace API
+                                                    |  (Uses GCE Attached IAM SA)
+                                                    v
+                                 +-------------------------------------+
+                                 | Google Cloud Platform               |
+                                 | - Cloud Monitoring (Metrics)        |
+                                 | - Cloud Trace (Spans)               |
+                                 | - Cloud Logging                     |
+                                 +-------------------------------------+
 ```
 
 ---
 
-## Quick Start Guide
+## 1. GCE VM Setup: Enable OTLP in Google Cloud Ops Agent
 
-### 1. Build and Start the Containers
+On your GCE VM, ensure the Google Cloud Ops Agent is installed and configure it to accept OTLP data:
 
-From inside the `vanilla-fastapi-app/` directory:
+1. **Install Ops Agent (if not already installed)**:
+   ```bash
+   curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+   sudo bash add-google-cloud-ops-agent-repo.sh --also-install
+   ```
+
+2. **Apply OTLP Configuration**:
+   Copy the provided `ops-agent-config.yaml` to the Ops Agent configuration directory:
+   ```bash
+   sudo cp ops-agent-config.yaml /etc/google-cloud-ops-agent/config.yaml
+   ```
+
+3. **Restart the Ops Agent**:
+   ```bash
+   sudo systemctl restart google-cloud-ops-agent
+   sudo systemctl status google-cloud-ops-agent
+   ```
+   *The Ops Agent is now listening on `0.0.0.0:4317` (gRPC) and `0.0.0.0:4318` (HTTP).*
+
+---
+
+## 2. Running the FastAPI Applications
+
+### Option A: Via Docker Compose
 
 ```bash
 docker compose up --build -d
 ```
+*Port mappings:*
+- Manual Instrumentation App: `http://localhost:8080`
+- Zero-Code Instrumentation App: `http://localhost:8081`
 
-### 2. Access the Interactive Dashboard UI
+### Option B: Directly on the VM (Python virtual environment)
 
-Open your browser to:
-[http://localhost:8080](http://localhost:8080)
+```bash
+# 1. Manual App
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
 
-### 3. Emitting Telemetry Metrics & Traces
-
-Click the action buttons on the dashboard UI:
-
-- **🟢 Successful Action**: Emits `vanilla_api_actions_total{action="success", status="200"}` metric counter and records latency in `vanilla_action_duration_seconds` histogram.
-- **🔴 Error Action**: Emits `vanilla_api_actions_total{action="error", status="500"}` metric counter and attaches an exception trace to GCP Cloud Trace.
-- **⚡ Distributed Trace**: Generates nested execution spans (`db_query_simulation` $\rightarrow$ `vector_search_simulation`) for Cloud Trace waterfall analysis.
-- **📊 Click Counter**: Increments custom UI click metric `vanilla_button_clicks_total`.
+# 2. Zero-Code App
+cd zero-code-app
+pip install -r requirements.txt
+opentelemetry-bootstrap -a install
+OTEL_SERVICE_NAME=zero-code-fastapi-service \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+opentelemetry-instrument uvicorn main:app --host 0.0.0.0 --port 8001
+```
 
 ---
 
-## Verifying Telemetry in GCP Console
+## 3. Verifying Telemetry in GCP Console
 
 1. **Cloud Monitoring (Metrics)**:
    - Navigate to **GCP Console $\rightarrow$ Cloud Monitoring $\rightarrow$ Metrics Explorer**.
@@ -62,5 +96,4 @@ Click the action buttons on the dashboard UI:
 
 2. **Cloud Trace (Waterfall Spans)**:
    - Navigate to **GCP Console $\rightarrow$ Cloud Trace $\rightarrow$ Trace Explorer**.
-   - Filter by Service: `vanilla-fastapi-service`.
-   - Click any trace to view the detailed waterfall spans (`db_query_simulation` $\rightarrow$ `vector_search_simulation`).
+   - Filter by Service: `vanilla-fastapi-service` or `zero-code-fastapi-service`.

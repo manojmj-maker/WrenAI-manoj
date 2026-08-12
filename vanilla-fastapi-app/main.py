@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vanilla-fastapi")
 
 SERVICE_NAME = "vanilla-fastapi-service"
-OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://vanilla-otel-collector:4317")
+OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 # Global OTel handles
 meter = None
@@ -366,7 +366,7 @@ HTML_CONTENT = """
         <div class="console-card">
             <div class="console-header">
                 <div><span class="status-dot"></span> Live Telemetry Terminal</div>
-                <div>Collector: <code>http://vanilla-otel-collector:4317</code></div>
+                <div>Collector: <code>GCE Ops Agent (Port 4317)</code></div>
             </div>
             <div class="terminal" id="terminal">
                 <div class="log-entry"><span class="log-time">[SYSTEM]</span> Dashboard initialized. Service: <b>vanilla-fastapi-service</b>. Ready to emit telemetry events...</div>

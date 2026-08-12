@@ -1,0 +1,34 @@
+# Google Cloud Ops Agent Configuration for GCE VM
+# Place this configuration at: /etc/google-cloud-ops-agent/config.yaml
+# Then restart the agent: sudo systemctl restart google-cloud-ops-agent
+
+metrics:
+  receivers:
+    otlp:
+      type: otlp
+      grpc_endpoint: 0.0.0.0:4317
+      http_endpoint: 0.0.0.0:4318
+  service:
+    pipelines:
+      otlp_pipeline:
+        receivers: [otlp]
+
+traces:
+  receivers:
+    otlp:
+      type: otlp
+      grpc_endpoint: 0.0.0.0:4317
+      http_endpoint: 0.0.0.0:4318
+  service:
+    pipelines:
+      otlp_pipeline:
+        receivers: [otlp]
+
+logging:
+  receivers:
+    otlp:
+      type: otlp
+  service:
+    pipelines:
+      otlp_pipeline:
+        receivers: [otlp]

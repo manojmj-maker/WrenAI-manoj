@@ -248,7 +248,7 @@ HTML_CONTENT = """
         <div class="console-card">
             <div class="console-header">
                 <div><span class="status-dot"></span> Live Telemetry Terminal (Port 8081)</div>
-                <div>Collector: <code>http://vanilla-otel-collector:4317</code></div>
+                <div>Collector: <code>GCE Ops Agent (Port 4317)</code></div>
             </div>
             <div class="terminal" id="terminal">
                 <div class="log-entry"><span class="log-time">[SYSTEM]</span> Zero-Code App initialized on <b>port 8081</b>. Service: <b>zero-code-fastapi-service</b>.</div>
