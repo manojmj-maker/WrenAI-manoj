@@ -49,8 +49,8 @@ jobs:
           SSH="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -p $RHEL_PORT $RHEL_USERNAME@$RHEL_HOST"
           SCP="scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P $RHEL_PORT"
 
-          echo "=== 1. Creating target directory on RHEL VM ==="
-          $SSH "mkdir -p $TARGET_DIR"
+          echo "=== 1. Creating target directory & setting permissions on RHEL VM ==="
+          $SSH "mkdir -p $TARGET_DIR && (sudo chown -R $RHEL_USERNAME:$RHEL_USERNAME $TARGET_DIR 2>/dev/null || true) && chmod -R u+rwX $TARGET_DIR 2>/dev/null || true"
 
           echo "=== 2. Transferring docker/ configuration files, src & vanilla-fastapi-app ==="
           $SCP -r docker/. "$RHEL_USERNAME@$RHEL_HOST:$TARGET_DIR/"
@@ -175,14 +175,16 @@ jobs:
             \$COMPOSE_CMD pull || true
             \$COMPOSE_CMD up -d --remove-orphans
 
-            echo \"=== Deploying Vanilla FastAPI App & Dedicated Collector ===\"
+            echo \"=== Deploying Vanilla FastAPI App & GCE Ops Agent Integration ===\"
+            if [ -f vanilla-fastapi-app/ops-agent-config.yaml ] && [ -d /etc/google-cloud-ops-agent ]; then
+              echo \"Configuring Google Cloud Ops Agent OTLP receiver...\"
+              sudo cp vanilla-fastapi-app/ops-agent-config.yaml /etc/google-cloud-ops-agent/config.yaml || true
+              sudo systemctl restart google-cloud-ops-agent || true
+            fi
+
             if [ -d vanilla-fastapi-app ]; then
               cd vanilla-fastapi-app
-              if [ -f ../gcp-key.json ]; then
-                cp ../gcp-key.json ./gcp-key.json
-                chmod 644 ./gcp-key.json
-              fi
-              \$COMPOSE_CMD up -d --build
+              \$COMPOSE_CMD up -d --build --remove-orphans
               cd ..
             fi
 
