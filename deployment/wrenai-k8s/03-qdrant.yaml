@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wren-qdrant
+  namespace: default
+  labels:
+    app: wren-qdrant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wren-qdrant
+  template:
+    metadata:
+      labels:
+        app: wren-qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.11.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+          volumeMounts:
+            - name: qdrant-storage
+              mountPath: /qdrant/storage
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+        - name: qdrant-storage
+          persistentVolumeClaim:
+            claimName: qdrant-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wren-qdrant
+  namespace: default
+spec:
+  selector:
+    app: wren-qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+    - name: grpc
+      port: 6334
+      targetPort: 6334

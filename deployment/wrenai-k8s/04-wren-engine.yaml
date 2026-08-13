@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wren-engine
+  namespace: default
+  labels:
+    app: wren-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wren-engine
+  template:
+    metadata:
+      labels:
+        app: wren-engine
+    spec:
+      volumes:
+        - name: wren-data
+          persistentVolumeClaim:
+            claimName: wren-data-pvc
+      initContainers:
+        - name: bootstrap
+          image: ghcr.io/canner/wren-bootstrap:0.1.5
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATA_PATH
+              value: "/app/data"
+          volumeMounts:
+            - name: wren-data
+              mountPath: /app/data
+          command: ["/bin/sh", "/app/init.sh"]
+      containers:
+        - name: wren-engine
+          image: ghcr.io/canner/wren-engine:0.14.8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 7432
+              name: sql
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "wren-engine"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "otlp"
+          volumeMounts:
+            - name: wren-data
+              mountPath: /usr/src/app/etc
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wren-engine
+  namespace: default
+spec:
+  selector:
+    app: wren-engine
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      name: http
+    - protocol: TCP
+      port: 7432
+      targetPort: 7432
+      name: sql

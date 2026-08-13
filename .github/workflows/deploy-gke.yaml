@@ -17,6 +17,7 @@ on:
     paths:
       - 'vanilla-fastapi-app/**'
       - 'deployment/vanilla-fastapi-k8s/**'
+      - 'deployment/wrenai-k8s/**'
       - '.github/workflows/deploy-gke.yaml'
 
 jobs:
@@ -70,6 +71,11 @@ jobs:
           echo "=== Deploying In-Cluster OpenTelemetry Collector ==="
           kubectl apply -f deployment/vanilla-fastapi-k8s/otel-collector-gke.yaml
 
+      - name: Deploy Wren AI Services to GKE
+        run: |
+          echo "=== Deploying Full Wren AI Stack (with OpenTelemetry Instrumentation) ==="
+          kubectl apply -f deployment/wrenai-k8s/
+
       - name: Deploy FastAPI Applications to GKE
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'zulinginternaldev' }}
@@ -86,6 +92,11 @@ jobs:
         run: |
           echo "=== Waiting for deployments to become ready ==="
           kubectl rollout status deployment/otel-collector --timeout=180s
+          kubectl rollout status deployment/wren-qdrant --timeout=180s
+          kubectl rollout status deployment/wren-engine --timeout=180s
+          kubectl rollout status deployment/wren-ibis-server --timeout=180s
+          kubectl rollout status deployment/wren-ai-service --timeout=180s
+          kubectl rollout status deployment/wren-ui --timeout=180s
           kubectl rollout status deployment/vanilla-fastapi-app --timeout=180s
           kubectl rollout status deployment/zero-code-fastapi-app --timeout=180s
 

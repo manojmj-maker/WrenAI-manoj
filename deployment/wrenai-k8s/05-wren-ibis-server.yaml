@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wren-ibis-server
+  namespace: default
+  labels:
+    app: wren-ibis-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wren-ibis-server
+  template:
+    metadata:
+      labels:
+        app: wren-ibis-server
+    spec:
+      containers:
+        - name: wren-ibis-server
+          image: ghcr.io/canner/wren-engine-ibis:0.14.8
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WREN_ENGINE_ENDPOINT
+              value: "http://wren-engine:8080"
+            - name: LOGGING_LEVEL
+              value: "INFO"
+            - name: OTEL_SERVICE_NAME
+              value: "wren-ibis-server"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "otlp"
+            - name: OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: http
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wren-ibis-server
+  namespace: default
+spec:
+  selector:
+    app: wren-ibis-server
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      name: http

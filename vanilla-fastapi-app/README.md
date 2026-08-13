@@ -6,29 +6,48 @@ This directory contains standalone **Vanilla FastAPI Applications** (Manual SDK 
 
 ## Architecture Topology
 
-```
-+-----------------------------------------------------------------------------------+
-| GCE Virtual Machine (RHEL / Debian / Ubuntu)                                      |
-|                                                                                   |
-|  +--------------------------------+                                               |
-|  |  vanilla-fastapi-app (8080)    |                                               |
-|  |  (FastAPI + OTel Python SDK)   | ---\                                          |
-|  +--------------------------------+     \                                         |
-|                                          +---> Google Cloud Ops Agent             |
-|  +--------------------------------+     /      (localhost:4317 / 4318)            |
-|  |  zero-code-fastapi-app (8081)  | ---/       (Native OTLP receiver)             |
-|  |  (opentelemetry-instrument)    |                                               |
-|  +--------------------------------+                                               |
-+---------------------------------------------------|-------------------------------+
-                                                    |  Cloud Monitoring / Trace API
-                                                    |  (Uses GCE Attached IAM SA)
-                                                    v
-                                 +-------------------------------------+
-                                 | Google Cloud Platform               |
-                                 | - Cloud Monitoring (Metrics)        |
-                                 | - Cloud Trace (Spans)               |
-                                 | - Cloud Logging                     |
-                                 +-------------------------------------+
+```mermaid
+flowchart TD
+    subgraph GKE["GKE Cluster (Kubernetes) / Host"]
+        subgraph NS["Namespace: wrenai / Microservices"]
+            subgraph APPS["All Services (100% Zero-Code Auto-Instrumented)"]
+                WREN_AI["wren-ai-service Pod<br/>⚡ Auto-Instrumented (FastAPI / Python)"]
+                WREN_UI["wren-ui Pod<br/>⚡ Auto-Instrumented (Next.js / Node.js)"]
+                IBIS["ibis-server Pod<br/>⚡ Auto-Instrumented (Python / SQL)"]
+                ENGINE["wren-engine Pod<br/>⚡ Auto-Instrumented (Java / Engine)"]
+                QDRANT["qdrant StatefulSet<br/>⚡ Auto-Instrumented / OTLP Exporter"]
+            end
+
+            subgraph OTEL_GW["Unified OTel Collector Gateway (Deployment + Service)"]
+                OTEL_SVC["otel-collector K8s Service<br/>(ClusterIP :4317 gRPC / :4318 HTTP)"]
+                OTEL_POD["otel-collector Pod<br/>(Unified Metrics, Traces & Logs Pipeline)"]
+                OTEL_SVC --> OTEL_POD
+            end
+        end
+    end
+
+    subgraph GCP["Google Cloud Platform Services"]
+        MONITORING["Cloud Monitoring<br/>(Custom APM Metrics)"]
+        TRACE["Cloud Trace<br/>(Distributed Spans)"]
+        LOGGING["Cloud Logging<br/>(Structured & Correlated Logs)"]
+    end
+
+    WREN_AI -->|"OTLP Auto-Injected (Traces, Metrics, Logs)"| OTEL_SVC
+    WREN_UI -->|"OTLP Auto-Injected (Traces & Logs)"| OTEL_SVC
+    IBIS -->|"OTLP Auto-Injected (Traces, Metrics, Logs)"| OTEL_SVC
+    ENGINE -->|"OTLP Auto-Injected (Traces & Metrics)"| OTEL_SVC
+    QDRANT -->|"OTLP (Metrics & Logs)"| OTEL_SVC
+
+    OTEL_POD -->|"googlecloud exporter (metrics)"| MONITORING
+    OTEL_POD -->|"googlecloud exporter (traces)"| TRACE
+    OTEL_POD -->|"googlecloud exporter (logs)"| LOGGING
+
+    classDef k8s fill:#fdf4ff,stroke:#c026d3,stroke-width:2px,color:#701a75;
+    classDef otel fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#78350f;
+    classDef gcp fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#0369a1;
+    class WREN_AI,WREN_UI,QDRANT,IBIS,ENGINE k8s;
+    class OTEL_SVC,OTEL_POD otel;
+    class MONITORING,TRACE,LOGGING gcp;
 ```
 
 ---
