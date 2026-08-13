@@ -19,6 +19,12 @@ spec:
         - name: wren-ibis-server
           image: ghcr.io/canner/wren-engine-ibis:0.14.8
           imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install --quiet --no-cache-dir opentelemetry-distro opentelemetry-exporter-otlp opentelemetry-instrumentation-fastapi opentelemetry-instrumentation-logging && \
+              opentelemetry-bootstrap -a install && \
+              opentelemetry-instrument uvicorn app:app --host 0.0.0.0 --port 8000
           env:
             - name: WREN_ENGINE_ENDPOINT
               value: "http://wren-engine:8080"
