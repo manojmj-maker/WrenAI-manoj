@@ -325,3 +325,6 @@ async def external_downstream_call():
 async def trigger_error():
     logger.error("Raising simulated 500 internal server error!")
     raise HTTPException(status_code=500, detail="Simulated Zero-Code Server Failure!")
+
+
+
