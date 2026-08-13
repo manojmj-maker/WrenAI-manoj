@@ -19,7 +19,16 @@ spec:
         - name: wren-data
           persistentVolumeClaim:
             claimName: wren-data-pvc
+        - name: otel-agent
+          emptyDir: {}
       initContainers:
+        - name: otel-agent-init
+          image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:latest
+          imagePullPolicy: IfNotPresent
+          command: ["cp", "/javaagent.jar", "/otel/opentelemetry-javaagent.jar"]
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel
         - name: bootstrap
           image: ghcr.io/canner/wren-bootstrap:0.1.5
           imagePullPolicy: IfNotPresent
@@ -40,6 +49,8 @@ spec:
             - containerPort: 7432
               name: sql
           env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/otel/opentelemetry-javaagent.jar"
             - name: OTEL_SERVICE_NAME
               value: "wren-engine"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -55,6 +66,8 @@ spec:
           volumeMounts:
             - name: wren-data
               mountPath: /usr/src/app/etc
+            - name: otel-agent
+              mountPath: /otel
           resources:
             limits:
               cpu: "1"
