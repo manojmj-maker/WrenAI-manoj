@@ -12,6 +12,14 @@ data:
             endpoint: 0.0.0.0:4317
           http:
             endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'qdrant-telemetry'
+              scrape_interval: 30s
+              metrics_path: '/metrics'
+              static_configs:
+                - targets: ['wren-qdrant:6333']
 
     processors:
       batch:
@@ -29,7 +37,7 @@ data:
     service:
       pipelines:
         metrics:
-          receivers: [otlp]
+          receivers: [otlp, prometheus]
           processors: [resourcedetection, batch]
           exporters: [debug, googlecloud]
         traces:
